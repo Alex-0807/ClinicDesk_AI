@@ -1,0 +1,47 @@
+generator client {
+  provider        = "prisma-client"
+  output          = "../src/generated/prisma" // Output directory for the generated Prisma Client
+  previewFeatures = ["postgresqlExtensions"]
+}// Without generating the Prisma Client, we won't be able to interact with our database in our application code. 
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [vector] //'extensions' and 'vector' are keywords, enabling the pgvector extension.
+}
+
+model Document {// This is a model
+  id        String   @id @default(uuid())// This is a field.
+  name      String
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+  chunks    Chunk[]
+
+  @@map("documents")
+  //@map translates the field name into database column name
+  //@@map translates the model name into database table name
+}
+
+model Chunk {
+  id         String                   @id @default(uuid())   //uuid(): generate a guaranteed unique id.
+  documentId String                   @map("document_id")
+  document   Document                 @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  content    String
+  embedding  Unsupported("vector(1536)")?
+  chunkIndex Int                      @map("chunk_index")
+
+  @@map("chunks")
+  //Unsupported means: I know you don't have a built-in TypeScript type for this.
+  //Just copy-paste this exact raw text vector(1536) directly to PostgreSQL, because PostgreSQL will know what it means.
+
+}
+
+model Enquiry {
+  id         String   @id @default(uuid())
+  question   String
+  category   String
+  draftReply String   @map("draft_reply")
+  sources    Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("enquiries")
+}

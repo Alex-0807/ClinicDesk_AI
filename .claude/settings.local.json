@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx prisma:*)",
+      "Bash(npm install:*)",
+      "Bash(PRISMA_USER_CONSENT_FOR_DANGEROUS_AI_ACTION=\"yes\" npx prisma migrate reset --force 2>&1)",
+      "Bash(psql:*)",
+      "Bash(npx tsx:*)",
+      "Bash(lsof -ti:3001)",
+      "Bash(xargs kill:*)"
+    ]
+  }
+}
