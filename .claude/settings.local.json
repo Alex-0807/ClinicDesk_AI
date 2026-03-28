@@ -7,7 +7,10 @@
       "Bash(psql:*)",
       "Bash(npx tsx:*)",
       "Bash(lsof -ti:3001)",
-      "Bash(xargs kill:*)"
+      "Bash(xargs kill:*)",
+      "Bash(npm run:*)",
+      "Bash(ls /Users/alex/MyProjects/ClinicDesk_AI/backend/src/generated/prisma/index*)",
+      "Bash(npm search:*)"
     ]
   }
 }
