@@ -10,7 +10,8 @@
       "Bash(xargs kill:*)",
       "Bash(npm run:*)",
       "Bash(ls /Users/alex/MyProjects/ClinicDesk_AI/backend/src/generated/prisma/index*)",
-      "Bash(npm search:*)"
+      "Bash(npm search:*)",
+      "Bash(lsof -ti:3003)"
     ]
   }
 }

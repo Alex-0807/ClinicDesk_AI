@@ -1,10 +1,8 @@
+import "dotenv/config"; // Must be first — loads .env before other modules read process.env
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import documentRoutes from "./routes/documents";
 import enquiryRoutes from "./routes/enquiries";
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3003;
