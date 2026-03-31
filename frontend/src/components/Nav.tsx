@@ -12,12 +12,17 @@ export default function Nav() {
   const pathname = usePathname();
 
   return (
-    <nav className="border-b border-gray-200 bg-white">
+    <nav className="border-b border-gray-200 bg-white shadow-sm">
       <div className="mx-auto max-w-4xl px-4 py-3 flex items-center gap-8">
-        <Link href="/" className="text-lg font-semibold text-blue-600">
-          ClinicDesk AI
+        <Link href="/" className="flex items-baseline gap-2">
+          <span className="text-lg font-semibold text-blue-600">
+            ClinicDesk AI
+          </span>
+          <span className="hidden sm:inline text-xs text-gray-400">
+            Admin Assistant
+          </span>
         </Link>
-        <div className="flex gap-4">
+        <div className="flex gap-1 ml-auto">
           {links.map((link) => (
             <Link
               key={link.href}

@@ -70,11 +70,24 @@ Generate a category label and draft reply based ONLY on the sources above. Respo
     ],
   });
 
-  const text =
+  let text =
     response.content[0].type === "text" ? response.content[0].text : "";
 
+  // Strip markdown code block formatting if Claude included it
+  if (text.startsWith("```json")) {
+    text = text.replace(/^```json\n/, "").replace(/\n```$/, "");
+  } else if (text.startsWith("```")) {
+    text = text.replace(/^```\n/, "").replace(/\n```$/, "");
+  }
+
   // Parse Claude's JSON response
-  const parsed = JSON.parse(text);
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    console.error("Failed to parse Claude's response as JSON. Raw text:", text);
+    throw new Error("AI response was not valid JSON");
+  }
 
   return {
     category: parsed.category,
