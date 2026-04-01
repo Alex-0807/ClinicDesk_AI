@@ -2,8 +2,8 @@ generator client {
   provider        = "prisma-client"
   output          = "../src/generated/prisma" // Output directory for the generated Prisma Client
   previewFeatures = ["postgresqlExtensions"]
-}// Without generating the Prisma Client, we won't be able to interact with our database in our application code. 
-
+}
+// Migration read this file as a blueprint to create actual database, and Generator create an 'API' so we don't need to write raw SQL queries.
 datasource db {
   provider   = "postgresql"
   extensions = [vector] //'extensions' and 'vector' are keywords, enabling the pgvector extension.
