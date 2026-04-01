@@ -1,29 +1,85 @@
 import { Router } from "express";
+import multer from "multer";
+// @ts-ignore - pdf-parse types are incorrectly declared for ES module imports
+import pdfParse from "pdf-parse";
+
 import prisma from "../lib/prisma";
 import { chunkText } from "../utils/chunker";
 import { embedTexts } from "../services/embedding";
 
 const router = Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      "text/plain",
+      "application/pdf",
+      "text/markdown",
+      "text/csv",
+    ];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only .txt, .pdf, .md, and .csv files are supported"));
+    }
+  },
+});
 
-// POST /api/documents/upload — upload a document, chunk it, embed chunks, store
-router.post("/upload", async (req, res) => {
+/**
+ * Extract text from an uploaded file buffer.
+ */
+async function extractText(buffer: Buffer, mimetype: string): Promise<string> {
+  if (mimetype === "application/pdf") {
+    // use as any to pass
+    const result = await (pdfParse as any)(buffer);
+    return result.text;
+  }
+  // txt, md, csv — just decode as UTF-8
+  return buffer.toString("utf-8");
+}
+
+// POST /api/documents/upload
+// Accepts either:
+//   - multipart form with "file" field (+ optional "name" field)
+//   - JSON body with { name, content }
+router.post("/upload", upload.single("file"), async (req, res) => {
   try {
-    const { name, content } = req.body;
+    let name: string;
+    let content: string;
+
+    if (req.file) {
+      // File upload path
+      content = await extractText(req.file.buffer, req.file.mimetype);
+      name = (req.body.name as string) || req.file.originalname;
+    } else {
+      // Text paste path (JSON body)
+      name = req.body.name;
+      content = req.body.content;
+    }
 
     if (!name || !content) {
       res.status(400).json({ error: "name and content are required" });
       return;
     }
 
+    const trimmed = content.trim();
+    if (trimmed.length === 0) {
+      res
+        .status(400)
+        .json({ error: "File appears to be empty or could not be read" });
+      return;
+    }
+
     // 1. Chunk the text
-    const chunks = chunkText(content);
+    const chunks = chunkText(trimmed);
 
     // 2. Embed all chunks in one API call
-    const embeddings = await embedTexts(chunks.map((c) => c));
+    const embeddings = await embedTexts(chunks);
 
     // 3. Store document
     const document = await prisma.document.create({
-      data: { name, content },
+      data: { name, content: trimmed },
     });
 
     // 4. Store chunks with embeddings using raw SQL (Prisma can't write vector columns directly)
@@ -48,9 +104,9 @@ router.post("/upload", async (req, res) => {
     });
   } catch (error) {
     console.error("Error processing document upload:", error);
-    res
-      .status(500)
-      .json({ error: "An error occurred while uploading the document" });
+    const message =
+      error instanceof Error ? error.message : "An error occurred";
+    res.status(500).json({ error: message });
   }
 });
 

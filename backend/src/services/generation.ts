@@ -30,10 +30,7 @@ export async function generateReply(
   chunks: RetrievedChunk[],
 ): Promise<GeneratedReply> {
   const sourceContext = chunks
-    .map(
-      (c, i) =>
-        `[Source ${i + 1} — ${c.document_name}]\n${c.content}`,
-    )
+    .map((c, i) => `[Source ${i + 1} — ${c.document_name}]\n${c.content}`)
     .join("\n\n");
 
   const response = await getClient().messages.create({
