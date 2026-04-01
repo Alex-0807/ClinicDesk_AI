@@ -5,19 +5,24 @@ import Link from "next/link";
 import EnquiryForm from "@/components/EnquiryForm";
 import EnquiryResult from "@/components/EnquiryResult";
 import type { EnquiryResponse } from "@/components/EnquiryForm";
+import RequireAuth from "@/components/RequireAuth";
+import { useAuth } from "@/lib/auth";
 import { apiFetch } from "@/lib/api";
 
 export default function HomePage() {
+  const { user } = useAuth();
   const [result, setResult] = useState<EnquiryResponse | null>(null);
   const [docCount, setDocCount] = useState<number | null>(null);
 
   useEffect(() => {
+    if (!user) return;
     apiFetch<{ id: string }[]>("/documents")
       .then((docs) => setDocCount(docs.length))
       .catch(() => setDocCount(0));
-  }, []);
+  }, [user]);
 
   return (
+    <RequireAuth>
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Enquiry Assistant</h1>
@@ -58,5 +63,6 @@ export default function HomePage() {
         </section>
       )}
     </div>
+    </RequireAuth>
   );
 }

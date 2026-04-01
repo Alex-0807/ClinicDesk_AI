@@ -3,11 +3,13 @@
 import { useState } from "react";
 import DocumentUpload from "@/components/DocumentUpload";
 import DocumentList from "@/components/DocumentList";
+import RequireAuth from "@/components/RequireAuth";
 
 export default function DocumentsPage() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   return (
+    <RequireAuth role="admin">
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Documents</h1>
@@ -30,5 +32,6 @@ export default function DocumentsPage() {
         <DocumentList refreshKey={refreshKey} />
       </section>
     </div>
+    </RequireAuth>
   );
 }
