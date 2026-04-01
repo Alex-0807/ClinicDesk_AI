@@ -1,6 +1,7 @@
 import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { chunkText } from "../src/utils/chunker";
+import { embedTexts } from "../src/services/embedding";
 import bcrypt from "bcrypt";
 import dotenv from "dotenv";
 
@@ -143,25 +144,43 @@ async function main() {
   for (const doc of DEMO_DOCUMENTS) {
     const chunks = chunkText(doc.content);
 
+    // Generate embeddings for all chunks via OpenAI
+    console.log(`  Generating embeddings for ${doc.name}...`);
+    const embeddings = await embedTexts(chunks);
+
+    // Create the document (without chunks, since we need raw SQL for vector)
     const document = await prisma.document.create({
       data: {
         name: doc.name,
         content: doc.content,
-        chunks: {
-          create: chunks.map((content, index) => ({
-            content,
-            chunkIndex: index,
-            // embedding is null for now — will be populated in step 4
-          })),
-        },
       },
-      include: { chunks: true },
     });
 
-    console.log(`  ✓ ${document.name} → ${document.chunks.length} chunks`);
+    // Insert chunks with embeddings using raw SQL
+    for (let i = 0; i < chunks.length; i++) {
+      const id = crypto.randomUUID();
+      const vectorStr = `[${embeddings[i].join(",")}]`;
+      await prisma.$queryRawUnsafe(
+        `INSERT INTO chunks (id, document_id, content, embedding, chunk_index)
+         VALUES ($1, $2, $3, $4::vector, $5)`,
+        id,
+        document.id,
+        chunks[i],
+        vectorStr,
+        i,
+      );
+    }
+
+    console.log(
+      `  ✓ ${document.name} → ${chunks.length} chunks (with embeddings)`,
+    );
   }
 
-  console.log("\nDone! Seeded", DEMO_DOCUMENTS.length, "documents.");
+  console.log(
+    "\nDone! Seeded",
+    DEMO_DOCUMENTS.length,
+    "documents with embeddings.",
+  );
 }
 
 main()
