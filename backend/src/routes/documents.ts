@@ -1,7 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
-// @ts-ignore - pdf-parse types are incorrectly declared for ES module imports
-import pdfParse from "pdf-parse";
+
+const pdfParse = require("pdf-parse");
 
 import prisma from "../lib/prisma";
 import { chunkText } from "../utils/chunker";
