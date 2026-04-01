@@ -11,6 +11,16 @@ export async function apiFetch<T>(
     headers.set("Content-Type", "application/json");
   }
 
+  // Auto-attach JWT token if available
+  if (!headers.has("Authorization")) {
+    const token = typeof window !== "undefined"
+      ? localStorage.getItem("clinicdesk_token")
+      : null;
+    if (token) {
+      headers.set("Authorization", `Bearer ${token}`);
+    }
+  }
+
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
     headers,

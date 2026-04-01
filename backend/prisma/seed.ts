@@ -1,6 +1,7 @@
 import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { chunkText } from "../src/utils/chunker";
+import bcrypt from "bcrypt";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -119,8 +120,23 @@ All clinicians are registered with AHPRA and hold current professional indemnity
 
 async function main() {
   // Clear existing data
+  await prisma.enquiry.deleteMany();
   await prisma.chunk.deleteMany();
   await prisma.document.deleteMany();
+  await prisma.user.deleteMany();
+
+  // Seed admin user
+  console.log("Seeding admin user...");
+  const passwordHash = await bcrypt.hash("admin123", 10);
+  const admin = await prisma.user.create({
+    data: {
+      email: "admin@clinicdesk.demo",
+      passwordHash,
+      name: "Admin User",
+      role: "admin",
+    },
+  });
+  console.log(`  ✓ Admin user: ${admin.email} (password: admin123)\n`);
 
   console.log("Seeding demo documents...\n");
 

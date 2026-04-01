@@ -3,11 +3,12 @@ import prisma from "../lib/prisma";
 import { embedText } from "../services/embedding";
 import { retrieveChunks } from "../services/retrieval";
 import { generateReply } from "../services/generation";
+import { authenticate } from "../middleware/auth";
 
 const router = Router();
 
 // POST /api/enquiries — the full RAG pipeline
-router.post("/", async (req, res) => {
+router.post("/", authenticate, async (req, res) => {
   try {
     const { question } = req.body;
 
@@ -35,13 +36,14 @@ router.post("/", async (req, res) => {
       chunks,
     );
 
-    // 4. Store the enquiry
+    // 4. Store the enquiry (linked to authenticated user)
     const enquiry = await prisma.enquiry.create({
       data: {
         question,
         category,
         draftReply,
         sources: sources,
+        userId: req.user!.userId,
       },
     });
 
@@ -60,10 +62,12 @@ router.post("/", async (req, res) => {
   }
 });
 
-// GET /api/enquiries — list past enquiries
-router.get("/", async (_req, res) => {
+// GET /api/enquiries — list past enquiries (admins see all, users see own)
+router.get("/", authenticate, async (req, res) => {
   try {
+    const where = req.user!.role === "admin" ? {} : { userId: req.user!.userId };
     const enquiries = await prisma.enquiry.findMany({
+      where,
       orderBy: { createdAt: "desc" },
       select: {
         id: true,

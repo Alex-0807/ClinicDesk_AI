@@ -13,7 +13,10 @@
       "Bash(npm search:*)",
       "Bash(lsof -ti:3003)",
       "Bash(npx create-next-app@latest frontend --typescript --tailwind --eslint --app --src-dir --no-import-alias --use-npm)",
-      "Bash(lsof -ti:3002)"
+      "Bash(lsof -ti:3002)",
+      "Bash(DATABASE_URL=\"postgresql://alex@localhost:5432/clinicdesk\" npx prisma migrate dev --name add-user-auth 2>&1)",
+      "Bash(npx tsc:*)",
+      "Bash(DATABASE_URL=\"postgresql://alex@localhost:5432/clinicdesk\" npx tsx prisma/seed.ts 2>&1)"
     ]
   }
 }

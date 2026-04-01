@@ -4,6 +4,7 @@ import multer from "multer";
 const pdfParse = require("pdf-parse");
 
 import prisma from "../lib/prisma";
+import { authenticate, requireRole } from "../middleware/auth";
 import { chunkText } from "../utils/chunker";
 import { embedTexts } from "../services/embedding";
 
@@ -43,75 +44,81 @@ async function extractText(buffer: Buffer, mimetype: string): Promise<string> {
 // Accepts either:
 //   - multipart form with "file" field (+ optional "name" field)
 //   - JSON body with { name, content }
-router.post("/upload", upload.single("file"), async (req, res) => {
-  try {
-    let name: string;
-    let content: string;
+router.post(
+  "/upload",
+  authenticate,
+  requireRole("admin"),
+  upload.single("file"),
+  async (req, res) => {
+    try {
+      let name: string;
+      let content: string;
 
-    if (req.file) {
-      // File upload path
-      content = await extractText(req.file.buffer, req.file.mimetype);
-      name = (req.body.name as string) || req.file.originalname;
-    } else {
-      // Text paste path (JSON body)
-      name = req.body.name;
-      content = req.body.content;
-    }
+      if (req.file) {
+        // File upload path
+        content = await extractText(req.file.buffer, req.file.mimetype);
+        name = (req.body.name as string) || req.file.originalname;
+      } else {
+        // Text paste path (JSON body)
+        name = req.body.name;
+        content = req.body.content;
+      }
 
-    if (!name || !content) {
-      res.status(400).json({ error: "name and content are required" });
-      return;
-    }
+      if (!name || !content) {
+        res.status(400).json({ error: "name and content are required" });
+        return;
+      }
 
-    const trimmed = content.trim();
-    if (trimmed.length === 0) {
-      res
-        .status(400)
-        .json({ error: "File appears to be empty or could not be read" });
-      return;
-    }
+      const trimmed = content.trim();
+      if (trimmed.length === 0) {
+        res
+          .status(400)
+          .json({ error: "File appears to be empty or could not be read" });
+        return;
+      }
 
-    // 1. Chunk the text
-    const chunks = chunkText(trimmed);
+      // 1. Chunk the text
+      const chunks = chunkText(trimmed);
 
-    // 2. Embed all chunks in one API call
-    const embeddings = await embedTexts(chunks);
+      // 2. Embed all chunks in one API call
+      const embeddings = await embedTexts(chunks);
 
-    // 3. Store document
-    const document = await prisma.document.create({
-      data: { name, content: trimmed },
-    });
+      // 3. Store document
+      const document = await prisma.document.create({
+        data: { name, content: trimmed },
+      });
 
-    // 4. Store chunks with embeddings using raw SQL (Prisma can't write vector columns directly)
-    for (let i = 0; i < chunks.length; i++) {
-      const id = crypto.randomUUID();
-      const vectorStr = `[${embeddings[i].join(",")}]`;
-      await prisma.$queryRawUnsafe(
-        `INSERT INTO chunks (id, document_id, content, embedding, chunk_index)
+      // 4. Store chunks with embeddings using raw SQL (Prisma can't write vector columns directly)
+      for (let i = 0; i < chunks.length; i++) {
+        const id = crypto.randomUUID();
+        const vectorStr = `[${embeddings[i].join(",")}]`;
+        await prisma.$queryRawUnsafe(
+          `INSERT INTO chunks (id, document_id, content, embedding, chunk_index)
          VALUES ($1, $2, $3, $4::vector, $5)`,
-        id,
-        document.id,
-        chunks[i],
-        vectorStr,
-        i,
-      );
-    }
+          id,
+          document.id,
+          chunks[i],
+          vectorStr,
+          i,
+        );
+      }
 
-    res.status(201).json({
-      id: document.id,
-      name: document.name,
-      chunksCreated: chunks.length,
-    });
-  } catch (error) {
-    console.error("Error processing document upload:", error);
-    const message =
-      error instanceof Error ? error.message : "An error occurred";
-    res.status(500).json({ error: message });
-  }
-});
+      res.status(201).json({
+        id: document.id,
+        name: document.name,
+        chunksCreated: chunks.length,
+      });
+    } catch (error) {
+      console.error("Error processing document upload:", error);
+      const message =
+        error instanceof Error ? error.message : "An error occurred";
+      res.status(500).json({ error: message });
+    }
+  },
+);
 
 // GET /api/documents — list all documents
-router.get("/", async (_req, res) => {
+router.get("/", authenticate, async (_req, res) => {
   try {
     const documents = await prisma.document.findMany({
       orderBy: { createdAt: "desc" },
@@ -127,10 +134,10 @@ router.get("/", async (_req, res) => {
 });
 
 // GET /api/documents/:id — get single document with chunks
-router.get("/:id", async (req, res) => {
+router.get("/:id", authenticate, async (req, res) => {
   try {
     const document = await prisma.document.findUnique({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       include: {
         chunks: {
           orderBy: { chunkIndex: "asc" },
@@ -154,9 +161,9 @@ router.get("/:id", async (req, res) => {
 });
 
 // DELETE /api/documents/:id — delete document and its chunks (cascade)
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", authenticate, requireRole("admin"), async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
 
     const document = await prisma.document.findUnique({ where: { id } });
     if (!document) {

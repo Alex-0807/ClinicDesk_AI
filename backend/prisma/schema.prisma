@@ -35,6 +35,23 @@ model Chunk {
 
 }
 
+enum Role {
+  admin
+  user
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  name         String
+  role         Role      @default(user)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  enquiries    Enquiry[]
+
+  @@map("users")
+}
+
 model Enquiry {
   id         String   @id @default(uuid())
   question   String
@@ -42,6 +59,8 @@ model Enquiry {
   draftReply String   @map("draft_reply")
   sources    Json
   createdAt  DateTime @default(now()) @map("created_at")
+  userId     String?  @map("user_id")
+  user       User?    @relation(fields: [userId], references: [id])
 
   @@map("enquiries")
 }

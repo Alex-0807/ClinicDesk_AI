@@ -1,6 +1,7 @@
 import "dotenv/config"; // Must be first — loads .env before other modules read process.env
 import express from "express";
 import cors from "cors";
+import authRoutes from "./routes/auth";
 import documentRoutes from "./routes/documents";
 import enquiryRoutes from "./routes/enquiries";
 
@@ -14,6 +15,7 @@ app.get("/api/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+app.use("/api/auth", authRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/enquiries", enquiryRoutes);
 
