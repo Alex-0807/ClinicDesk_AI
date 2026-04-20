@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import type { EnquiryResponse } from "./EnquiryForm";
+import { useAuth } from "@/lib/auth";
 
 const categoryColors: Record<string, string> = {
   Fees: "bg-green-100 text-green-800",
@@ -16,20 +18,31 @@ interface Props {
 }
 
 export default function EnquiryResult({ result }: Props) {
+  const { user } = useAuth();
   const colorClass = categoryColors[result.category] || categoryColors.General;
 
   return (
     <div className="space-y-6">
-      {/* Category */}
-      <div>
-        <h3 className="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
-          Category
-        </h3>
-        <span
-          className={`inline-block rounded-full px-3 py-1 text-sm font-medium ${colorClass}`}
-        >
-          {result.category}
-        </span>
+      {/* Category + Pipeline link */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-xs font-medium uppercase tracking-wide text-gray-500 mb-1">
+            Category
+          </h3>
+          <span
+            className={`inline-block rounded-full px-3 py-1 text-sm font-medium ${colorClass}`}
+          >
+            {result.category}
+          </span>
+        </div>
+        {user?.role === "admin" && (
+          <Link
+            href={`/rag-pipeline`}
+            className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
+          >
+            View in RAG Pipeline &rarr;
+          </Link>
+        )}
       </div>
 
       {/* Draft Reply */}

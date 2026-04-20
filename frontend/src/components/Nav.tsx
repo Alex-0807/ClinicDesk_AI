@@ -35,16 +35,28 @@ export default function Nav() {
               Enquiry
             </Link>
             {isAdmin && (
-              <Link
-                href="/documents"
-                className={`text-sm font-medium px-3 py-1.5 rounded-md transition-colors ${
-                  pathname === "/documents"
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                }`}
-              >
-                Documents
-              </Link>
+              <>
+                <Link
+                  href="/documents"
+                  className={`text-sm font-medium px-3 py-1.5 rounded-md transition-colors ${
+                    pathname === "/documents"
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                  }`}
+                >
+                  Documents
+                </Link>
+                <Link
+                  href="/rag-pipeline"
+                  className={`text-sm font-medium px-3 py-1.5 rounded-md transition-colors ${
+                    pathname === "/rag-pipeline"
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                  }`}
+                >
+                  RAG Pipeline
+                </Link>
+              </>
             )}
 
             <span className="ml-4 text-xs text-gray-400">
