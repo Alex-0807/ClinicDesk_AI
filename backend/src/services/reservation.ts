@@ -29,12 +29,35 @@ function toDateTime(date: string, time: string): Date {
   return dt;
 }
 
-function validateTimeRange(startTime: string, endTime: string): void {
+const OPEN_HOUR = 8;   // 08:00
+const CLOSE_HOUR = 18; // 18:00
+const SLOT_MINUTES = 30;
+
+function validateSlot(date: string, startTime: string, endTime: string): void {
+  // Must be a weekday (Mon–Fri). Parse as UTC to avoid timezone shifts on a date-only string.
+  const day = new Date(`${date}T00:00:00.000Z`).getUTCDay(); // 0=Sun, 6=Sat
+  if (day === 0 || day === 6) {
+    throw new ReservationError(
+      `Reservations are only available Monday–Friday (${date} is a weekend)`,
+      "INVALID_TIME"
+    );
+  }
+
   const [sh, sm] = startTime.split(":").map(Number);
   const [eh, em] = endTime.split(":").map(Number);
-  if (sh * 60 + sm >= eh * 60 + em) {
+  const startMinutes = sh * 60 + sm;
+  const endMinutes = eh * 60 + em;
+
+  if (endMinutes - startMinutes !== SLOT_MINUTES) {
     throw new ReservationError(
-      "startTime must be before endTime",
+      `Each reservation must be exactly ${SLOT_MINUTES} minutes`,
+      "INVALID_TIME"
+    );
+  }
+
+  if (startMinutes < OPEN_HOUR * 60 || endMinutes > CLOSE_HOUR * 60) {
+    throw new ReservationError(
+      `Reservations must be within clinic hours (${OPEN_HOUR}:00–${CLOSE_HOUR}:00)`,
       "INVALID_TIME"
     );
   }
@@ -55,7 +78,7 @@ export async function checkAvailability(
   input: CheckAvailabilityInput
 ): Promise<AvailabilityResult> {
   const { date, startTime, endTime } = input;
-  validateTimeRange(startTime, endTime);
+  validateSlot(date, startTime, endTime);
 
   const requestedStart = toDateTime(date, startTime);
   const requestedEnd = toDateTime(date, endTime);
@@ -97,7 +120,7 @@ export async function createReservation(
   input: CreateReservationInput
 ): Promise<ReservationRecord> {
   const { date, startTime, endTime, serviceType, userId, notes } = input;
-  validateTimeRange(startTime, endTime);
+  validateSlot(date, startTime, endTime);
 
   const availability = await checkAvailability({ date, startTime, endTime });
   if (!availability.available) {
@@ -178,7 +201,7 @@ export async function modifyReservation(
     updates.date || updates.startTime || updates.endTime;
 
   if (timeChanged) {
-    validateTimeRange(effectiveStart, effectiveEnd);
+    validateSlot(effectiveDate, effectiveStart, effectiveEnd);
 
     const reservationDate = new Date(`${effectiveDate}T00:00:00.000Z`);
     const requestedStart = toDateTime(effectiveDate, effectiveStart);

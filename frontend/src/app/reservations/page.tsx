@@ -26,6 +26,32 @@ const SERVICE_TYPES = [
   "Dietetics",
 ];
 
+// 30-minute slots from 08:00 to 17:30 (last slot ends at 18:00)
+const SLOTS: { start: string; end: string; label: string }[] = Array.from(
+  { length: 20 },
+  (_, i) => {
+    const totalStart = 8 * 60 + i * 30;
+    const totalEnd = totalStart + 30;
+    const fmt = (m: number) =>
+      `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+    return { start: fmt(totalStart), end: fmt(totalEnd), label: `${fmt(totalStart)} – ${fmt(totalEnd)}` };
+  }
+);
+
+function isWeekend(dateStr: string): boolean {
+  const day = new Date(`${dateStr}T00:00:00Z`).getUTCDay();
+  return day === 0 || day === 6;
+}
+
+// Next available weekday (today if weekday, otherwise skip to Monday)
+function nextWeekday(): string {
+  const d = new Date();
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) {
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return d.toISOString().split("T")[0];
+}
+
 function formatTime(isoString: string): string {
   return new Date(isoString).toISOString().substring(11, 16);
 }
@@ -54,19 +80,24 @@ function StatusBadge({ status }: { status: Reservation["status"] }) {
 // ---------------------------------------------------------------------------
 
 function CheckAvailabilityTab() {
-  const [date, setDate] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
+  const [date, setDate] = useState(nextWeekday);
+  const [slotIndex, setSlotIndex] = useState(0);
   const [result, setResult] = useState<AvailabilityResult | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const slot = SLOTS[slotIndex];
+
   async function handleCheck() {
     setError("");
     setResult(null);
+    if (isWeekend(date)) {
+      setError("Please choose a weekday (Mon–Fri).");
+      return;
+    }
     setLoading(true);
     try {
-      const data = await checkAvailability(date, startTime, endTime);
+      const data = await checkAvailability(date, slot.start, slot.end);
       setResult(data);
     } catch (e) {
       setError((e as Error).message);
@@ -78,43 +109,42 @@ function CheckAvailabilityTab() {
   return (
     <div className="space-y-6">
       <p className="text-sm text-gray-500">
-        Check whether a time slot is free before booking.
+        Check whether a 30-minute slot is free (Mon–Fri, 08:00–18:00).
       </p>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
           <input
             type="date"
             value={date}
             min={new Date().toISOString().split("T")[0]}
-            onChange={(e) => setDate(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={(e) => { setDate(e.target.value); setResult(null); }}
+            className={`w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              date && isWeekend(date) ? "border-red-400 bg-red-50" : "border-gray-300"
+            }`}
           />
+          {date && isWeekend(date) && (
+            <p className="mt-1 text-xs text-red-600">Weekdays only (Mon–Fri)</p>
+          )}
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Start time</label>
-          <input
-            type="time"
-            value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
+          <label className="block text-sm font-medium text-gray-700 mb-1">Time slot</label>
+          <select
+            value={slotIndex}
+            onChange={(e) => { setSlotIndex(Number(e.target.value)); setResult(null); }}
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">End time</label>
-          <input
-            type="time"
-            value={endTime}
-            onChange={(e) => setEndTime(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          >
+            {SLOTS.map((s, i) => (
+              <option key={s.start} value={i}>{s.label}</option>
+            ))}
+          </select>
         </div>
       </div>
 
       <button
         onClick={handleCheck}
-        disabled={!date || !startTime || !endTime || loading}
+        disabled={!date || isWeekend(date) || loading}
         className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
       >
         {loading ? "Checking…" : "Check availability"}
@@ -160,32 +190,34 @@ function CheckAvailabilityTab() {
 // ---------------------------------------------------------------------------
 
 function BookTab({ onBooked }: { onBooked: () => void }) {
-  const [date, setDate] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
+  const [date, setDate] = useState(nextWeekday);
+  const [slotIndex, setSlotIndex] = useState(0);
   const [serviceType, setServiceType] = useState(SERVICE_TYPES[0]);
   const [notes, setNotes] = useState("");
   const [success, setSuccess] = useState<Reservation | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const slot = SLOTS[slotIndex];
+
   async function handleBook() {
     setError("");
     setSuccess(null);
+    if (isWeekend(date)) {
+      setError("Please choose a weekday (Mon–Fri).");
+      return;
+    }
     setLoading(true);
     try {
       const reservation = await createReservation({
         date,
-        startTime,
-        endTime,
+        startTime: slot.start,
+        endTime: slot.end,
         serviceType,
         notes: notes || undefined,
       });
       setSuccess(reservation);
       onBooked();
-      setDate("");
-      setStartTime("");
-      setEndTime("");
       setNotes("");
     } catch (e) {
       setError((e as Error).message);
@@ -197,10 +229,10 @@ function BookTab({ onBooked }: { onBooked: () => void }) {
   return (
     <div className="space-y-5">
       <p className="text-sm text-gray-500">
-        Fill in the details below to create a reservation.
+        Select a 30-minute slot (Mon–Fri, 08:00–18:00).
       </p>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
           <input
@@ -208,26 +240,25 @@ function BookTab({ onBooked }: { onBooked: () => void }) {
             value={date}
             min={new Date().toISOString().split("T")[0]}
             onChange={(e) => setDate(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className={`w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              date && isWeekend(date) ? "border-red-400 bg-red-50" : "border-gray-300"
+            }`}
           />
+          {date && isWeekend(date) && (
+            <p className="mt-1 text-xs text-red-600">Weekdays only (Mon–Fri)</p>
+          )}
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Start time</label>
-          <input
-            type="time"
-            value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
+          <label className="block text-sm font-medium text-gray-700 mb-1">Time slot</label>
+          <select
+            value={slotIndex}
+            onChange={(e) => setSlotIndex(Number(e.target.value))}
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">End time</label>
-          <input
-            type="time"
-            value={endTime}
-            onChange={(e) => setEndTime(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
+          >
+            {SLOTS.map((s, i) => (
+              <option key={s.start} value={i}>{s.label}</option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -259,7 +290,7 @@ function BookTab({ onBooked }: { onBooked: () => void }) {
 
       <button
         onClick={handleBook}
-        disabled={!date || !startTime || !endTime || loading}
+        disabled={!date || isWeekend(date) || loading}
         className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
       >
         {loading ? "Booking…" : "Create reservation"}
@@ -289,21 +320,31 @@ function EditModal({
   onClose: () => void;
   onSaved: (updated: Reservation) => void;
 }) {
+  const existingStart = formatTime(reservation.startTime);
+  const initialSlot = SLOTS.findIndex((s) => s.start === existingStart);
+
   const [date, setDate] = useState(formatDate(reservation.date));
-  const [startTime, setStartTime] = useState(formatTime(reservation.startTime));
-  const [endTime, setEndTime] = useState(formatTime(reservation.endTime));
+  const [slotIndex, setSlotIndex] = useState(initialSlot >= 0 ? initialSlot : 0);
   const [serviceType, setServiceType] = useState(reservation.serviceType);
   const [notes, setNotes] = useState(reservation.notes ?? "");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const slot = SLOTS[slotIndex];
+
   async function handleSave() {
     setError("");
+    if (isWeekend(date)) {
+      setError("Please choose a weekday (Mon–Fri).");
+      return;
+    }
     setLoading(true);
     const updates: ModifyReservationInput = {};
     if (date !== formatDate(reservation.date)) updates.date = date;
-    if (startTime !== formatTime(reservation.startTime)) updates.startTime = startTime;
-    if (endTime !== formatTime(reservation.endTime)) updates.endTime = endTime;
+    if (slot.start !== existingStart) {
+      updates.startTime = slot.start;
+      updates.endTime = slot.end;
+    }
     if (serviceType !== reservation.serviceType) updates.serviceType = serviceType;
     if (notes !== (reservation.notes ?? "")) updates.notes = notes;
 
@@ -322,35 +363,34 @@ function EditModal({
       <div className="w-full max-w-md rounded-xl bg-white shadow-lg p-6 space-y-4">
         <h3 className="text-base font-semibold text-gray-900">Edit reservation</h3>
 
-        <div className="grid grid-cols-3 gap-3">
-          <div className="col-span-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className={`w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                date && isWeekend(date) ? "border-red-400 bg-red-50" : "border-gray-300"
+              }`}
             />
+            {date && isWeekend(date) && (
+              <p className="mt-1 text-xs text-red-600">Weekdays only</p>
+            )}
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Start</label>
-            <input
-              type="time"
-              value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
+            <label className="block text-sm font-medium text-gray-700 mb-1">Time slot</label>
+            <select
+              value={slotIndex}
+              onChange={(e) => setSlotIndex(Number(e.target.value))}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            >
+              {SLOTS.map((s, i) => (
+                <option key={s.start} value={i}>{s.label}</option>
+              ))}
+            </select>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">End</label>
-            <input
-              type="time"
-              value={endTime}
-              onChange={(e) => setEndTime(e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
+          <div className="col-span-2">
             <label className="block text-sm font-medium text-gray-700 mb-1">Service</label>
             <select
               value={serviceType}
@@ -385,7 +425,7 @@ function EditModal({
           </button>
           <button
             onClick={handleSave}
-            disabled={loading}
+            disabled={loading || isWeekend(date)}
             className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
           >
             {loading ? "Saving…" : "Save changes"}
