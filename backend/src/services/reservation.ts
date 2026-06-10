@@ -4,6 +4,7 @@ import {
   AvailabilityResult,
   CheckAvailabilityInput,
   CreateReservationInput,
+  ListReservationsInput,
   ModifyReservationInput,
   ReservationError,
   ReservationRecord,
@@ -268,5 +269,37 @@ export async function cancelReservation(id: string): Promise<ReservationRecord> 
   return prisma.reservation.update({
     where: { id },
     data: { status: ReservationStatus.CANCELLED },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 6. List / search reservations
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns reservations matching the given filters, ordered by date then time.
+ * All filters are optional — omitting all returns every reservation.
+ * Designed to be the LangChain agent's primary lookup tool when it doesn't
+ * already hold a reservation ID.
+ */
+export async function listReservations(
+  input: ListReservationsInput
+): Promise<ReservationRecord[]> {
+  const { userId, date, dateFrom, dateTo, status, serviceType } = input;
+
+  return prisma.reservation.findMany({
+    where: {
+      ...(userId && { userId }),
+      ...(status && { status }),
+      ...(serviceType && { serviceType }),
+      ...(date && { date: new Date(`${date}T00:00:00.000Z`) }),
+      ...(!date && (dateFrom || dateTo) && {
+        date: {
+          ...(dateFrom && { gte: new Date(`${dateFrom}T00:00:00.000Z`) }),
+          ...(dateTo && { lte: new Date(`${dateTo}T00:00:00.000Z`) }),
+        },
+      }),
+    },
+    orderBy: [{ date: "asc" }, { startTime: "asc" }],
   });
 }

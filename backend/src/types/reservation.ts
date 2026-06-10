@@ -39,6 +39,15 @@ export interface CreateReservationInput {
   notes?: string;
 }
 
+export interface ListReservationsInput {
+  userId?: string;
+  date?: string;           // filter by exact date "YYYY-MM-DD"
+  dateFrom?: string;       // filter by date range start
+  dateTo?: string;         // filter by date range end
+  status?: ReservationStatus;
+  serviceType?: string;
+}
+
 export interface ModifyReservationInput {
   date?: string;
   startTime?: string;

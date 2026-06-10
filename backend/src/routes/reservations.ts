@@ -3,12 +3,12 @@ import {
   checkAvailability,
   createReservation,
   getReservation,
+  listReservations,
   modifyReservation,
   cancelReservation,
 } from "../services/reservation";
 import { ReservationError } from "../types/reservation";
 import { authenticate } from "../middleware/auth";
-import prisma from "../lib/prisma";
 
 const router = Router();
 
@@ -27,13 +27,19 @@ function handleError(err: unknown, res: Response): void {
   res.status(500).json({ error: "Internal server error" });
 }
 
-// GET /api/reservations  — list reservations for the authenticated user
+// GET /api/reservations?date=&dateFrom=&dateTo=&status=&serviceType=
+// Admins may pass any userId; regular users are scoped to their own.
 router.get("/", authenticate, async (req: Request, res: Response) => {
   try {
-    const userId = req.user!.userId;
-    const reservations = await prisma.reservation.findMany({
-      where: { userId },
-      orderBy: [{ date: "asc" }, { startTime: "asc" }],
+    const isAdmin = req.user!.role === "admin";
+    const q = req.query as Record<string, string>;
+    const reservations = await listReservations({
+      userId: isAdmin && q.userId ? q.userId : req.user!.userId,
+      date: q.date,
+      dateFrom: q.dateFrom,
+      dateTo: q.dateTo,
+      status: q.status as Parameters<typeof listReservations>[0]["status"],
+      serviceType: q.serviceType,
     });
     res.json(reservations);
   } catch (err) {
