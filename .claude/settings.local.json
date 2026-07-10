@@ -16,7 +16,9 @@
       "Bash(lsof -ti:3002)",
       "Bash(DATABASE_URL=\"postgresql://alex@localhost:5432/clinicdesk\" npx prisma migrate dev --name add-user-auth 2>&1)",
       "Bash(npx tsc:*)",
-      "Bash(DATABASE_URL=\"postgresql://alex@localhost:5432/clinicdesk\" npx tsx prisma/seed.ts 2>&1)"
+      "Bash(DATABASE_URL=\"postgresql://alex@localhost:5432/clinicdesk\" npx tsx prisma/seed.ts 2>&1)",
+      "Bash(node -e \"const d=require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\); const p=JSON.parse\\(d\\); console.log\\(Object.keys\\(p.exports||{}\\).filter\\(k=>k.includes\\('agent'\\)\\).join\\('\\\\n'\\)\\)\")",
+      "Bash(node -e \"const l = require\\('@langchain/core/messages'\\); console.log\\(Object.keys\\(l\\).filter\\(k=>k.includes\\('Message'\\)\\).join\\(','\\)\\)\")"
     ]
   }
 }

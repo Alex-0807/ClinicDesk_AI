@@ -14,6 +14,7 @@ function getJwtSecret(): string {
 export interface JwtPayload {
   userId: string;
   email: string;
+  name: string;
   role: Role;
 }
 
@@ -44,6 +45,7 @@ export async function loginUser(email: string, password: string) {
   const payload: JwtPayload = {
     userId: user.id,
     email: user.email,
+    name: user.name,
     role: user.role,
   };
 

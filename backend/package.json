@@ -16,6 +16,8 @@
   "type": "commonjs",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",
+    "@langchain/anthropic": "^1.4.0",
+    "@langchain/core": "^1.1.48",
     "@prisma/adapter-pg": "^7.5.0",
     "@prisma/client": "^7.5.0",
     "bcrypt": "^6.0.0",
@@ -23,6 +25,7 @@
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
+    "langchain": "^1.4.4",
     "multer": "^2.1.1",
     "openai": "^6.33.0",
     "pdf-parse": "^1.1.1",
