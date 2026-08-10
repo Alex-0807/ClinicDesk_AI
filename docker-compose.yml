@@ -25,6 +25,7 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/clinicdesk
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
       PORT: "3003"
       FRONTEND_URL: http://localhost:3002
     volumes:
@@ -38,6 +39,7 @@ services:
   frontend:
     build: ./frontend
     restart: unless-stopped
+    command: sh -c "npm ci && npx next dev --port 3002"
     ports:
       - "3002:3002"
     environment:

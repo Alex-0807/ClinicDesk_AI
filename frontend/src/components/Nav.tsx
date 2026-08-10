@@ -24,15 +24,26 @@ export default function Nav() {
 
         {user && (
           <div className="flex gap-1 ml-auto items-center">
+            {/* Enquiry nav link removed — replaced by Chat page */}
             <Link
-              href="/"
+              href="/chat"
               className={`text-sm font-medium px-3 py-1.5 rounded-md transition-colors ${
-                pathname === "/"
+                pathname === "/chat"
                   ? "bg-blue-50 text-blue-700"
                   : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
               }`}
             >
-              Enquiry
+              Chat
+            </Link>
+            <Link
+              href="/reservations"
+              className={`text-sm font-medium px-3 py-1.5 rounded-md transition-colors ${
+                pathname === "/reservations"
+                  ? "bg-blue-50 text-blue-700"
+                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+              }`}
+            >
+              Reservations
             </Link>
             {isAdmin && (
               <>
@@ -55,6 +66,16 @@ export default function Nav() {
                   }`}
                 >
                   RAG Pipeline
+                </Link>
+                <Link
+                  href="/admin/reservations"
+                  className={`text-sm font-medium px-3 py-1.5 rounded-md transition-colors ${
+                    pathname === "/admin/reservations"
+                      ? "bg-blue-50 text-blue-700"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                  }`}
+                >
+                  All Bookings
                 </Link>
               </>
             )}

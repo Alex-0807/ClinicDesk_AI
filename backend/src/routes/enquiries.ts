@@ -3,6 +3,7 @@ import prisma from "../lib/prisma";
 import { embedText } from "../services/embedding";
 import { retrieveChunks } from "../services/retrieval";
 import { generateReply } from "../services/generation";
+import { searchKnowledge } from "../services/knowledge";
 import { authenticate, requireRole } from "../middleware/auth";
 
 const router = Router();
@@ -17,32 +18,21 @@ router.post("/", authenticate, async (req, res) => {
       return;
     }
 
-    // 1. Embed the question
-    const queryEmbedding = await embedText(question);
+    const { answer, category, sources } = await searchKnowledge(question);
 
-    // 2. Retrieve relevant chunks via pgvector similarity search
-    const chunks = await retrieveChunks(queryEmbedding, 5);
-
-    if (chunks.length === 0) {
+    if (sources.length === 0) {
       res.status(404).json({
         error: "No documents found. Please upload clinic documents first.",
       });
       return;
     }
 
-    // 3. Generate reply using Claude
-    const { category, draftReply, sources } = await generateReply(
-      question,
-      chunks,
-    );
-
-    // 4. Store the enquiry (linked to authenticated user)
     const enquiry = await prisma.enquiry.create({
       data: {
         question,
         category,
-        draftReply,
-        sources: sources,
+        draftReply: answer,
+        sources,
         userId: req.user!.userId,
       },
     });
@@ -51,7 +41,7 @@ router.post("/", authenticate, async (req, res) => {
       id: enquiry.id,
       question: enquiry.question,
       category,
-      draftReply,
+      draftReply: answer,
       sources,
     });
   } catch (error) {

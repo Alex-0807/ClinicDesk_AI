@@ -40,6 +40,41 @@ enum Role {
   user
 }
 
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+model ChatLog {
+  id          String   @id @default(uuid())
+  userId      String?  @map("user_id")
+  user        User?    @relation(fields: [userId], references: [id])
+  userMessage String   @map("user_message")
+  agentReply  String   @map("agent_reply")
+  toolsUsed   String[] @map("tools_used")
+  feedback    Int?     // 1 = thumbs up, -1 = thumbs down, null = no feedback yet
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("chat_logs")
+}
+
+model Reservation {
+  id          String            @id @default(uuid())
+  userId      String?           @map("user_id")
+  user        User?             @relation(fields: [userId], references: [id])
+  date        DateTime          @db.Date
+  startTime   DateTime          @map("start_time") @db.Time()
+  endTime     DateTime          @map("end_time") @db.Time()
+  serviceType String            @map("service_type")
+  status      ReservationStatus @default(PENDING)
+  notes       String?
+  createdAt   DateTime          @default(now()) @map("created_at")
+  updatedAt   DateTime          @updatedAt @map("updated_at")
+
+  @@map("reservations")
+}
+
 model User {
   id           String    @id @default(uuid())
   email        String    @unique
@@ -48,6 +83,8 @@ model User {
   role         Role      @default(user)
   createdAt    DateTime  @default(now()) @map("created_at")
   enquiries    Enquiry[]
+  reservations Reservation[]
+  chatLogs     ChatLog[]
 
   @@map("users")
 }

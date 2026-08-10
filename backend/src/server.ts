@@ -4,6 +4,8 @@ import cors from "cors";
 import authRoutes from "./routes/auth";
 import documentRoutes from "./routes/documents";
 import enquiryRoutes from "./routes/enquiries";
+import reservationRoutes from "./routes/reservations";
+import agentRoutes from "./routes/agent";
 
 const app = express();
 const PORT = process.env.PORT || 3003;
@@ -18,6 +20,8 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/enquiries", enquiryRoutes);
+app.use("/api/reservations", reservationRoutes);
+app.use("/api/agent", agentRoutes);
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
