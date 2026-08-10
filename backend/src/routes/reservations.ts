@@ -8,7 +8,8 @@ import {
   cancelReservation,
 } from "../services/reservation";
 import { ReservationError } from "../types/reservation";
-import { authenticate } from "../middleware/auth";
+import { authenticate, requireRole } from "../middleware/auth";
+import prisma from "../lib/prisma";
 
 const router = Router();
 
@@ -40,6 +41,29 @@ router.get("/", authenticate, async (req: Request, res: Response) => {
       dateTo: q.dateTo,
       status: q.status as Parameters<typeof listReservations>[0]["status"],
       serviceType: q.serviceType,
+    });
+    res.json(reservations);
+  } catch (err) {
+    handleError(err, res);
+  }
+});
+
+// GET /api/reservations/admin/all — all reservations with user info (admin only)
+router.get("/admin/all", authenticate, requireRole("admin"), async (req: Request, res: Response) => {
+  try {
+    const q = req.query as Record<string, string>;
+    const reservations = await prisma.reservation.findMany({
+      where: {
+        ...(q.status && { status: q.status as Parameters<typeof listReservations>[0]["status"] }),
+        ...(q.serviceType && { serviceType: q.serviceType }),
+        ...(q.date && { date: new Date(`${q.date}T00:00:00.000Z`) }),
+        ...(q.dateFrom && { date: { gte: new Date(`${q.dateFrom}T00:00:00.000Z`) } }),
+        ...(q.dateTo && { date: { lte: new Date(`${q.dateTo}T00:00:00.000Z`) } }),
+      },
+      include: {
+        user: { select: { name: true, email: true } },
+      },
+      orderBy: [{ date: "asc" }, { startTime: "asc" }],
     });
     res.json(reservations);
   } catch (err) {

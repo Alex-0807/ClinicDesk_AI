@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import RequireAuth from "@/components/RequireAuth";
 import { sendMessage, ChatMessage } from "@/lib/agent";
+import ReactMarkdown from "react-markdown";
 
 const TOOL_LABELS: Record<string, string> = {
   searchKnowledge: "Searched knowledge base",
@@ -67,7 +68,7 @@ export default function ChatPage() {
         {
           role: "assistant",
           content: response.reply,
-          toolsUsed: response.toolsUsed,
+          toolsUsed: [...new Set(response.toolsUsed)],
         },
       ]);
     } catch (err) {
@@ -110,17 +111,42 @@ export default function ChatPage() {
                 {msg.loading ? (
                   <span className="flex gap-1 items-center text-gray-400">
                     <span className="animate-bounce">•</span>
-                    <span className="animate-bounce [animation-delay:0.15s]">•</span>
-                    <span className="animate-bounce [animation-delay:0.3s]">•</span>
+                    <span className="animate-bounce [animation-delay:0.15s]">
+                      •
+                    </span>
+                    <span className="animate-bounce [animation-delay:0.3s]">
+                      •
+                    </span>
                   </span>
                 ) : (
                   <>
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                    <ReactMarkdown
+                      components={{
+                        p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+                        table: ({ children }) => (
+                          <div className="overflow-x-auto my-2">
+                            <table className="text-xs border-collapse w-full">{children}</table>
+                          </div>
+                        ),
+                        th: ({ children }) => (
+                          <th className="border border-gray-300 px-2 py-1 bg-gray-50 font-semibold text-left">{children}</th>
+                        ),
+                        td: ({ children }) => (
+                          <td className="border border-gray-300 px-2 py-1">{children}</td>
+                        ),
+                        strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                        ul: ({ children }) => <ul className="list-disc pl-4 my-1">{children}</ul>,
+                        ol: ({ children }) => <ol className="list-decimal pl-4 my-1">{children}</ol>,
+                        li: ({ children }) => <li className="mb-0.5">{children}</li>,
+                      }}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
                     {msg.toolsUsed && msg.toolsUsed.length > 0 && (
                       <div className="mt-2 pt-2 border-t border-gray-100 flex flex-wrap gap-1">
                         {msg.toolsUsed.map((t) => (
                           <span
-                            key={t}
+                            key={`${t}-${i}`}
                             className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] text-blue-600 font-medium"
                           >
                             {TOOL_LABELS[t] ?? t}
