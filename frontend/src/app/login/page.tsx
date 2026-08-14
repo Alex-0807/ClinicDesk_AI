@@ -19,7 +19,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      router.push("/");
+      router.replace("/chat");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -32,7 +32,8 @@ export default function LoginPage() {
       <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h1 className="mb-2 text-xl font-bold text-gray-900">Sign In</h1>
         <p className="mb-6 text-sm text-gray-500">
-          Click &quot;Login with Demo Account&quot; to explore the app instantly.
+          Click &quot;Login with Demo Account&quot; to explore the app
+          instantly.
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
