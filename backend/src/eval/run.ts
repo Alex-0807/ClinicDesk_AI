@@ -7,7 +7,7 @@ import { embedText } from "../services/embedding";
 import { retrieveChunks } from "../services/retrieval";
 import { generateReply } from "../services/generation";
 import { evalDataset } from "./dataset";
-import { isHit, reciprocalRank, factCoverage, looksLikeAbstain } from "./metrics";
+import { isHit, reciprocalRank, factCoverage } from "./metrics";
 
 const TOP_K = 5;
 
@@ -21,7 +21,10 @@ interface CaseResult {
   hit: boolean | null; // null = no expected document, not applicable
   reciprocalRank: number | null;
   factCoverage: number | null; // null = no facts to check
-  looksLikeAbstain: boolean;
+  expectedAnswered: boolean;
+  actualAnswered: boolean;
+  actualReason: string;
+  answeredCorrect: boolean;
   draftReply: string;
 }
 
@@ -42,12 +45,15 @@ async function runCase(testCase: (typeof evalDataset)[number]): Promise<CaseResu
       hit: hasExpectedDoc ? false : null,
       reciprocalRank: hasExpectedDoc ? 0 : null,
       factCoverage: null,
-      looksLikeAbstain: true,
+      expectedAnswered: testCase.expectedAnswered,
+      actualAnswered: false,
+      actualReason: "INSUFFICIENT_CONTEXT",
+      answeredCorrect: testCase.expectedAnswered === false,
       draftReply: "(no chunks retrieved — fallback message)",
     };
   }
 
-  const { category, draftReply } = await generateReply(testCase.question, chunks);
+  const { category, answered, reason, draftReply } = await generateReply(testCase.question, chunks);
 
   return {
     question: testCase.question,
@@ -59,7 +65,10 @@ async function runCase(testCase: (typeof evalDataset)[number]): Promise<CaseResu
     hit: hasExpectedDoc ? isHit(chunks, testCase.expectedDocumentName) : null,
     reciprocalRank: hasExpectedDoc ? reciprocalRank(chunks, testCase.expectedDocumentName) : null,
     factCoverage: factCoverage(draftReply, testCase.expectedFacts),
-    looksLikeAbstain: looksLikeAbstain(draftReply),
+    expectedAnswered: testCase.expectedAnswered,
+    actualAnswered: answered,
+    actualReason: reason,
+    answeredCorrect: answered === testCase.expectedAnswered,
     draftReply,
   };
 }
@@ -81,7 +90,6 @@ async function main() {
 
   const retrievalResults = results.filter((r) => r.hit !== null);
   const factResults = results.filter((r) => r.factCoverage !== null);
-  const abstainCases = results.filter((r) => r.expectedDocumentName === null);
 
   const summary = {
     totalCases: results.length,
@@ -91,8 +99,7 @@ async function main() {
     mrr: average(retrievalResults.map((r) => r.reciprocalRank ?? 0)),
     factCoverageCasesEvaluated: factResults.length,
     avgFactCoverage: average(factResults.map((r) => r.factCoverage ?? 0)),
-    abstainCasesTotal: abstainCases.length,
-    abstainCasesLookingCorrect: abstainCases.filter((r) => r.looksLikeAbstain).length,
+    answerabilityAccuracy: average(results.map((r) => (r.answeredCorrect ? 1 : 0))),
   };
 
   console.log("\n--- Summary ---");
@@ -101,7 +108,7 @@ async function main() {
     "Hit Rate@5": `${(summary.hitRateAt5 * 100).toFixed(0)}% (${summary.retrievalCasesEvaluated} cases)`,
     MRR: summary.mrr.toFixed(2),
     "Avg fact coverage": `${(summary.avgFactCoverage * 100).toFixed(0)}% (${summary.factCoverageCasesEvaluated} cases)`,
-    "Abstain on irrelevant Qs": `${summary.abstainCasesLookingCorrect}/${summary.abstainCasesTotal}`,
+    "Answerability accuracy": `${(summary.answerabilityAccuracy * 100).toFixed(0)}% (${summary.totalCases} cases)`,
   });
 
   const report = {

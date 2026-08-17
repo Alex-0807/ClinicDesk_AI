@@ -34,25 +34,3 @@ export function factCoverage(reply: string, expectedFacts: string[]): number | n
   const found = expectedFacts.filter((fact) => haystack.includes(fact.toLowerCase()));
   return found.length / expectedFacts.length;
 }
-
-const ABSTAIN_KEYWORDS = [
-  "don't have",
-  "do not have",
-  "couldn't find",
-  "could not find",
-  "no information",
-  "not able to find",
-  "outside",
-  "unrelated",
-  "sorry",
-];
-
-/**
- * Best-effort, deterministic signal for whether the reply declined to answer
- * rather than hallucinating from irrelevant sources. Informational only —
- * not a scored pass/fail, since wording isn't guaranteed.
- */
-export function looksLikeAbstain(reply: string): boolean {
-  const lower = reply.toLowerCase();
-  return ABSTAIN_KEYWORDS.some((kw) => lower.includes(kw));
-}

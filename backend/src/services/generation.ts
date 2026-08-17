@@ -15,8 +15,12 @@ interface RetrievedChunk {
   similarity: number;
 }
 
+type AnswerReason = "ANSWERED" | "OUT_OF_SCOPE" | "INSUFFICIENT_CONTEXT";
+
 interface GeneratedReply {
   category: string;
+  answered: boolean;
+  reason: AnswerReason;
   draftReply: string;
   sources: { chunkId: string; snippet: string; documentName: string }[];
 }
@@ -43,11 +47,26 @@ Rules:
 - ONLY use information from the provided sources. Do not make up information.
 - Do NOT give medical advice, diagnoses, or emergency triage.
 - Be warm, professional, and concise.
-- If the sources don't contain enough information to answer, say so honestly.
+- First decide whether the enquiry can be answered from the clinic knowledge base.
+- If the enquiry is unrelated to Sunrise Allied Health Clinic, its services, appointments, fees, referrals, policies, or other clinic-related matters:
+  - set "answered" to false
+  - set "reason" to "OUT_OF_SCOPE"
+  - briefly explain that you can only help with clinic-related enquiries
+- If the enquiry is clinic-related but the provided sources do not contain enough information to answer it:
+  - set "answered" to false
+  - set "reason" to "INSUFFICIENT_CONTEXT"
+  - say that the available clinic information does not contain enough information to answer
+- If the provided sources support an answer:
+  - set "answered" to true
+  - set "reason" to "ANSWERED"
+  - answer using only the provided sources
+- The category and answerability decision are separate. A "General" category does not automatically mean the question is out of scope.
 
 You must respond with valid JSON in this exact format:
 {
   "category": "<one of: Fees, Referral, Cancellation, Telehealth, Services, General>",
+  "answered": <true or false>,
+  "reason": "<one of: ANSWERED, OUT_OF_SCOPE, INSUFFICIENT_CONTEXT>",
   "draftReply": "<the draft reply text for the patient>"
 }`,
     messages: [
@@ -62,7 +81,7 @@ ${sourceContext}
 Patient enquiry:
 "${question}"
 
-Generate a category label and draft reply based ONLY on the sources above. Respond with valid JSON only.`,
+Decide the category and whether the enquiry is answerable, then generate the draft reply based ONLY on the sources above. Respond with valid JSON only.`,
       },
     ],
   });
@@ -86,8 +105,42 @@ Generate a category label and draft reply based ONLY on the sources above. Respo
     throw new Error("AI response was not valid JSON");
   }
 
+  const validCategories = [
+    "Fees",
+    "Referral",
+    "Cancellation",
+    "Telehealth",
+    "Services",
+    "General",
+  ];
+  const validReasons: AnswerReason[] = [
+    "ANSWERED",
+    "OUT_OF_SCOPE",
+    "INSUFFICIENT_CONTEXT",
+  ];
+
+  if (
+    !validCategories.includes(parsed.category) ||
+    typeof parsed.answered !== "boolean" ||
+    !validReasons.includes(parsed.reason) ||
+    typeof parsed.draftReply !== "string"
+  ) {
+    console.error("Claude returned an unexpected response shape:", parsed);
+    throw new Error("AI response had an invalid structure");
+  }
+
+  if (
+    (parsed.answered && parsed.reason !== "ANSWERED") ||
+    (!parsed.answered && parsed.reason === "ANSWERED")
+  ) {
+    console.error("Claude returned inconsistent answerability fields:", parsed);
+    throw new Error("AI response had inconsistent answerability fields");
+  }
+
   return {
     category: parsed.category,
+    answered: parsed.answered,
+    reason: parsed.reason,
     draftReply: parsed.draftReply,
     sources: chunks.map((c) => ({
       chunkId: c.id,
