@@ -58,6 +58,13 @@ function makeFakeAgent(reply: string, toolsInvoked: string[] = []) {
 // Tests
 // ---------------------------------------------------------------------------
 
+function expectDone(result: Awaited<ReturnType<typeof runAgent>>) {
+  if (result.status !== "done") {
+    throw new Error(`Expected status "done", got "${result.status}"`);
+  }
+  return result;
+}
+
 describe("runAgent", () => {
   const USER_ID = "user-123";
   const USER_NAME = "Alex";
@@ -69,7 +76,7 @@ describe("runAgent", () => {
   it("returns a reply string and empty toolsUsed when agent responds directly", async () => {
     mockCreateReactAgent.mockReturnValue(makeFakeAgent("Hello! How can I help?") as never);
 
-    const result = await runAgent("Hi", [], USER_ID, USER_NAME);
+    const result = expectDone(await runAgent("Hi", [], USER_ID, USER_NAME));
 
     expect(result.reply).toBe("Hello! How can I help?");
     expect(Array.isArray(result.toolsUsed)).toBe(true);
@@ -119,7 +126,9 @@ describe("runAgent", () => {
   it("handles empty history without crashing", async () => {
     mockCreateReactAgent.mockReturnValue(makeFakeAgent("Sure!") as never);
 
-    const result = await runAgent("Book me an appointment", [], USER_ID, USER_NAME);
+    const result = expectDone(
+      await runAgent("Book me an appointment", [], USER_ID, USER_NAME)
+    );
 
     expect(result.reply).toBe("Sure!");
   });
@@ -127,7 +136,7 @@ describe("runAgent", () => {
   it("returns toolsUsed as an empty array when no callbacks fire", async () => {
     mockCreateReactAgent.mockReturnValue(makeFakeAgent("Done.") as never);
 
-    const result = await runAgent("test", [], USER_ID, USER_NAME);
+    const result = expectDone(await runAgent("test", [], USER_ID, USER_NAME));
 
     expect(result.toolsUsed).toEqual([]);
   });

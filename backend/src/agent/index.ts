@@ -1,5 +1,7 @@
+import { randomUUID } from "crypto";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
+import { Command, INTERRUPT, MemorySaver, isInterrupted } from "@langchain/langgraph";
 import { HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
 import {
   searchKnowledgeTool,
@@ -9,6 +11,7 @@ import {
   getReservationTool,
   modifyReservationTool,
   cancelReservationTool,
+  PendingAction,
 } from "./tools";
 
 export interface ChatMessage {
@@ -16,10 +19,19 @@ export interface ChatMessage {
   content: string;
 }
 
-export interface AgentResponse {
-  reply: string;
-  toolsUsed: string[];
+export type AgentResponse =
+  | { status: "done"; conversationId: string; reply: string; toolsUsed: string[] }
+  | { status: "pending_confirmation"; conversationId: string; description: string };
+
+interface ThreadOwner {
+  userId: string;
+  userName: string;
 }
+
+// In-memory checkpointer + thread ownership map. Both reset on server restart —
+// acceptable for this MVP, but it means a paused confirmation won't survive a redeploy.
+const checkpointer = new MemorySaver();
+const threadOwners = new Map<string, ThreadOwner>();
 
 function buildSystemPrompt(userId: string, userName: string): string {
   const today = new Date().toISOString().split("T")[0];
@@ -43,12 +55,7 @@ Guidelines:
 - Do not give medical advice or diagnoses.`;
 }
 
-export async function runAgent(
-  message: string,
-  history: ChatMessage[],
-  userId: string,
-  userName: string
-): Promise<AgentResponse> {
+function buildAgent(userId: string, userName: string) {
   const model = new ChatAnthropic({
     model: "claude-sonnet-4-6",
     apiKey: process.env.ANTHROPIC_API_KEY,
@@ -64,13 +71,63 @@ export async function runAgent(
     cancelReservationTool,
   ];
 
-  const agent = createReactAgent({
+  return createReactAgent({
     llm: model,
     tools,
     prompt: buildSystemPrompt(userId, userName),
+    checkpointer,
   });
+}
 
-  // Convert history to LangChain message format
+function toAgentResponse(
+  result: unknown,
+  conversationId: string,
+  toolsUsed: string[]
+): AgentResponse {
+  if (isInterrupted<PendingAction>(result)) {
+    return {
+      status: "pending_confirmation",
+      conversationId,
+      description: result[INTERRUPT][0].value!.summary,
+    };
+  }
+
+  const messages = (result as { messages: BaseMessage[] }).messages;
+  const lastMessage = messages[messages.length - 1];
+  const reply =
+    typeof lastMessage.content === "string"
+      ? lastMessage.content
+      : JSON.stringify(lastMessage.content);
+
+  return { status: "done", conversationId, reply, toolsUsed };
+}
+
+function toolTrackingCallback(toolsUsed: string[]) {
+  return {
+    handleToolStart(
+      _tool: unknown,
+      _input: string,
+      _runId: string,
+      _parentRunId?: string,
+      _tags?: string[],
+      _metadata?: Record<string, unknown>,
+      name?: string
+    ) {
+      if (name) toolsUsed.push(name);
+    },
+  };
+}
+
+export async function runAgent(
+  message: string,
+  history: ChatMessage[],
+  userId: string,
+  userName: string,
+  conversationId: string = randomUUID()
+): Promise<AgentResponse> {
+  threadOwners.set(conversationId, { userId, userName });
+  const agent = buildAgent(userId, userName);
+
   const historyMessages: BaseMessage[] = history.map((m) =>
     m.role === "human" ? new HumanMessage(m.content) : new AIMessage(m.content)
   );
@@ -80,29 +137,31 @@ export async function runAgent(
   const result = await agent.invoke(
     { messages: [...historyMessages, new HumanMessage(message)] },
     {
-      callbacks: [
-        {
-          handleToolStart(
-            _tool: unknown,
-            _input: string,
-            _runId: string,
-            _parentRunId?: string,
-            _tags?: string[],
-            _metadata?: Record<string, unknown>,
-            name?: string
-          ) {
-            if (name) toolsUsed.push(name);
-          },
-        },
-      ],
+      configurable: { thread_id: conversationId },
+      callbacks: [toolTrackingCallback(toolsUsed)],
     }
   );
 
-  const lastMessage = result.messages[result.messages.length - 1];
-  const reply =
-    typeof lastMessage.content === "string"
-      ? lastMessage.content
-      : JSON.stringify(lastMessage.content);
+  return toAgentResponse(result, conversationId, toolsUsed);
+}
 
-  return { reply, toolsUsed };
+export async function runAgentResume(
+  conversationId: string,
+  userId: string,
+  approved: boolean
+): Promise<AgentResponse> {
+  const owner = threadOwners.get(conversationId);
+  if (!owner || owner.userId !== userId) {
+    throw new Error("No pending confirmation found for this user.");
+  }
+
+  const agent = buildAgent(owner.userId, owner.userName);
+  const toolsUsed: string[] = [];
+
+  const result = await agent.invoke(new Command({ resume: { approved } }), {
+    configurable: { thread_id: conversationId },
+    callbacks: [toolTrackingCallback(toolsUsed)],
+  });
+
+  return toAgentResponse(result, conversationId, toolsUsed);
 }
