@@ -62,6 +62,14 @@ Rules:
   - answer using only the provided sources
 - The category and answerability decision are separate. A "General" category does not automatically mean the question is out of scope.
 
+Category definitions:
+- Fees: costs, rebates, payment methods, bulk billing.
+- Referral: GP referrals, NDIS, referral validity, visit limits.
+- Cancellation: cancelling or rescheduling, no-shows, AND late arrivals.
+- Telehealth: video appointments, eligibility, platform, telehealth rebates.
+- Services: what services/therapies are offered, AND clinician qualifications, registration, or credentials.
+- General: anything else clinic-related that doesn't fit the above, or unrelated/out-of-scope questions.
+
 You must respond with valid JSON in this exact format:
 {
   "category": "<one of: Fees, Referral, Cancellation, Telehealth, Services, General>",
