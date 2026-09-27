@@ -1,8 +1,33 @@
 import { Router, Request, Response } from "express";
 import { authenticate } from "../middleware/auth";
-import { runAgent, runAgentResume, ChatMessage } from "../agent/index";
+import { runAgent, runAgentResume, ChatMessage, AgentResponse } from "../agent/index";
+import prisma from "../lib/prisma";
 
 const router = Router();
+
+// Logging must never break the response the user is waiting on, so failures
+// are reported and swallowed here.
+async function logChat(
+  userId: string,
+  userMessage: string,
+  result: AgentResponse,
+  latencyMs: number
+): Promise<void> {
+  try {
+    await prisma.chatLog.create({
+      data: {
+        userId,
+        conversationId: result.conversationId,
+        userMessage,
+        agentReply: result.status === "done" ? result.reply : result.description,
+        toolsUsed: result.status === "done" ? result.toolsUsed : [],
+        latencyMs,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to write chat log:", err);
+  }
+}
 
 // POST /api/agent/chat
 // Body: { message: string, history?: { role: "human"|"assistant", content: string }[], conversationId?: string }
@@ -19,6 +44,7 @@ router.post("/chat", authenticate, async (req: Request, res: Response) => {
       return;
     }
 
+    const start = Date.now();
     const result = await runAgent(
       message,
       history,
@@ -26,6 +52,7 @@ router.post("/chat", authenticate, async (req: Request, res: Response) => {
       req.user!.name,
       conversationId,
     );
+    await logChat(req.user!.userId, message, result, Date.now() - start);
 
     res.json(result);
   } catch (err) {
@@ -49,7 +76,14 @@ router.post("/resume", authenticate, async (req: Request, res: Response) => {
       return;
     }
 
+    const start = Date.now();
     const result = await runAgentResume(conversationId, req.user!.userId, approved);
+    await logChat(
+      req.user!.userId,
+      approved ? "[Approved]" : "[Denied]",
+      result,
+      Date.now() - start
+    );
 
     res.json(result);
   } catch (err) {
