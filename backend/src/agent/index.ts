@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
-import { Command, INTERRUPT, MemorySaver, isInterrupted } from "@langchain/langgraph";
+import { Command, INTERRUPT, isInterrupted } from "@langchain/langgraph";
+import { RedisSaver } from "@langchain/langgraph-checkpoint-redis";
 import { HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
 import {
   searchKnowledgeTool,
@@ -13,6 +14,7 @@ import {
   cancelReservationTool,
   PendingAction,
 } from "./tools";
+import { getRedis } from "../lib/redis";
 
 export interface ChatMessage {
   role: "human" | "assistant";
@@ -28,10 +30,45 @@ interface ThreadOwner {
   userName: string;
 }
 
-// In-memory checkpointer + thread ownership map. Both reset on server restart —
-// acceptable for this MVP, but it means a paused confirmation won't survive a redeploy.
-const checkpointer = new MemorySaver();
-const threadOwners = new Map<string, ThreadOwner>();
+// Agent state (checkpoints) and thread ownership both live in Redis, so a paused
+// confirmation survives a server restart. Both expire after an hour of inactivity.
+const CONVERSATION_TTL_MINUTES = 60;
+
+let checkpointerPromise: Promise<RedisSaver> | undefined;
+function getCheckpointer(): Promise<RedisSaver> {
+  if (!checkpointerPromise) {
+    checkpointerPromise = getRedis()
+      .then(
+        (client) =>
+          new RedisSaver(client, {
+            defaultTTL: CONVERSATION_TTL_MINUTES,
+            refreshOnRead: true,
+          })
+      )
+      .catch((err) => {
+        checkpointerPromise = undefined; // allow the next call to retry
+        throw err;
+      });
+  }
+  return checkpointerPromise;
+}
+
+function ownerKey(conversationId: string): string {
+  return `agent:owner:${conversationId}`;
+}
+
+async function setThreadOwner(conversationId: string, owner: ThreadOwner): Promise<void> {
+  const redis = await getRedis();
+  await redis.set(ownerKey(conversationId), JSON.stringify(owner), {
+    EX: CONVERSATION_TTL_MINUTES * 60,
+  });
+}
+
+async function getThreadOwner(conversationId: string): Promise<ThreadOwner | null> {
+  const redis = await getRedis();
+  const raw = await redis.get(ownerKey(conversationId));
+  return raw ? (JSON.parse(raw) as ThreadOwner) : null;
+}
 
 function buildSystemPrompt(userId: string, userName: string): string {
   const today = new Date().toISOString().split("T")[0];
@@ -55,7 +92,7 @@ Guidelines:
 - Do not give medical advice or diagnoses.`;
 }
 
-function buildAgent(userId: string, userName: string) {
+function buildAgent(userId: string, userName: string, checkpointer: RedisSaver) {
   const model = new ChatAnthropic({
     model: "claude-sonnet-4-6",
     apiKey: process.env.ANTHROPIC_API_KEY,
@@ -125,19 +162,30 @@ export async function runAgent(
   userName: string,
   conversationId: string = randomUUID()
 ): Promise<AgentResponse> {
-  threadOwners.set(conversationId, { userId, userName });
-  const agent = buildAgent(userId, userName);
+  const owner = await getThreadOwner(conversationId);
+  if (owner && owner.userId !== userId) {
+    throw new Error("Conversation belongs to another user.");
+  }
+  await setThreadOwner(conversationId, { userId, userName });
+  const checkpointer = await getCheckpointer();
+  const agent = buildAgent(userId, userName, checkpointer);
+  const config = { configurable: { thread_id: conversationId } };
 
-  const historyMessages: BaseMessage[] = history.map((m) =>
-    m.role === "human" ? new HumanMessage(m.content) : new AIMessage(m.content)
-  );
+  // If this thread is already checkpointed, the saved state holds the history.
+  // Re-sending it would append duplicates (new message objects get new ids).
+  const existing = await checkpointer.getTuple(config);
+  const historyMessages: BaseMessage[] = existing
+    ? []
+    : history.map((m) =>
+        m.role === "human" ? new HumanMessage(m.content) : new AIMessage(m.content)
+      );
 
   const toolsUsed: string[] = [];
 
   const result = await agent.invoke(
     { messages: [...historyMessages, new HumanMessage(message)] },
     {
-      configurable: { thread_id: conversationId },
+      ...config,
       callbacks: [toolTrackingCallback(toolsUsed)],
     }
   );
@@ -150,12 +198,12 @@ export async function runAgentResume(
   userId: string,
   approved: boolean
 ): Promise<AgentResponse> {
-  const owner = threadOwners.get(conversationId);
+  const owner = await getThreadOwner(conversationId);
   if (!owner || owner.userId !== userId) {
     throw new Error("No pending confirmation found for this user.");
   }
 
-  const agent = buildAgent(owner.userId, owner.userName);
+  const agent = buildAgent(owner.userId, owner.userName, await getCheckpointer());
   const toolsUsed: string[] = [];
 
   const result = await agent.invoke(new Command({ resume: { approved } }), {

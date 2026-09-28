@@ -15,6 +15,28 @@ vi.mock("@langchain/langgraph/prebuilt", () => ({
   createReactAgent: vi.fn(),
 }));
 
+// In-memory stand-ins for Redis: a Map for the owner keys, and a fake
+// checkpointer whose getTuple() decides whether a thread "already exists".
+const { redisStore, mockGetTuple } = vi.hoisted(() => ({
+  redisStore: new Map<string, string>(),
+  mockGetTuple: vi.fn(),
+}));
+
+vi.mock("../lib/redis", () => ({
+  getRedis: async () => ({
+    get: async (key: string) => redisStore.get(key) ?? null,
+    set: async (key: string, value: string) => {
+      redisStore.set(key, value);
+    },
+  }),
+}));
+
+vi.mock("@langchain/langgraph-checkpoint-redis", () => ({
+  RedisSaver: class {
+    getTuple = mockGetTuple;
+  },
+}));
+
 vi.mock("../services/knowledge", () => ({
   searchKnowledge: vi.fn(),
 }));
@@ -71,6 +93,8 @@ describe("runAgent", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    redisStore.clear();
+    mockGetTuple.mockResolvedValue(undefined); // default: brand-new thread
   });
 
   it("returns a reply string and empty toolsUsed when agent responds directly", async () => {
@@ -96,6 +120,32 @@ describe("runAgent", () => {
     // The agent's invoke should have been called with 3 messages (2 history + 1 new)
     const invokeCall = fakeAgent.invoke.mock.calls[0][0];
     expect(invokeCall.messages).toHaveLength(3);
+  });
+
+  it("sends only the new message when the thread is already checkpointed", async () => {
+    const fakeAgent = makeFakeAgent("ok");
+    mockCreateReactAgent.mockReturnValue(fakeAgent as never);
+    mockGetTuple.mockResolvedValue({ checkpoint: {} }); // saved state holds the history
+
+    const history = [
+      { role: "human" as const, content: "What are your hours?" },
+      { role: "assistant" as const, content: "We are open weekdays." },
+    ];
+
+    await runAgent("Can you repeat that?", history, USER_ID, USER_NAME, "conv-1");
+
+    const invokeCall = fakeAgent.invoke.mock.calls[0][0];
+    expect(invokeCall.messages).toHaveLength(1);
+  });
+
+  it("rejects a conversationId owned by another user", async () => {
+    mockCreateReactAgent.mockReturnValue(makeFakeAgent("ok") as never);
+
+    await runAgent("hi", [], "user-A", "A", "conv-shared");
+
+    await expect(
+      runAgent("hi", [], "user-B", "B", "conv-shared")
+    ).rejects.toThrow("another user");
   });
 
   it("creates the agent with the correct number of tools", async () => {
