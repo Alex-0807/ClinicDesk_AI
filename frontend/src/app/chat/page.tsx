@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import RequireAuth from "@/components/RequireAuth";
-import { sendMessage, ChatMessage } from "@/lib/agent";
+import { sendMessage, resumeAction, ChatMessage, AgentResponse } from "@/lib/agent";
 import ReactMarkdown from "react-markdown";
 
 const TOOL_LABELS: Record<string, string> = {
@@ -27,6 +27,10 @@ interface Message {
   content: string;
   toolsUsed?: string[];
   loading?: boolean;
+  confirmation?: {
+    description: string;
+    resolved?: "approved" | "rejected";
+  };
 }
 
 export default function ChatPage() {
@@ -39,6 +43,7 @@ export default function ChatPage() {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [conversationId, setConversationId] = useState<string | undefined>();
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -62,7 +67,33 @@ export default function ChatPage() {
     setLoading(true);
 
     try {
-      const response = await sendMessage(message, history);
+      const response = await sendMessage(message, history, conversationId);
+      applyAgentResponse(response);
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev.slice(0, -1),
+        {
+          role: "assistant",
+          content: "Sorry, something went wrong. Please try again.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function applyAgentResponse(response: AgentResponse) {
+    setConversationId(response.conversationId);
+    if (response.status === "pending_confirmation") {
+      setMessages((prev) => [
+        ...prev.slice(0, -1),
+        {
+          role: "assistant",
+          content: "",
+          confirmation: { description: response.description },
+        },
+      ]);
+    } else {
       setMessages((prev) => [
         ...prev.slice(0, -1),
         {
@@ -71,6 +102,25 @@ export default function ChatPage() {
           toolsUsed: [...new Set(response.toolsUsed)],
         },
       ]);
+    }
+  }
+
+  async function handleConfirm(index: number, approved: boolean) {
+    if (!conversationId || loading) return;
+
+    setMessages((prev) =>
+      prev.map((m, i) =>
+        i === index && m.confirmation
+          ? { ...m, confirmation: { ...m.confirmation, resolved: approved ? "approved" : "rejected" } }
+          : m
+      )
+    );
+    setMessages((prev) => [...prev, { role: "assistant", content: "", loading: true }]);
+    setLoading(true);
+
+    try {
+      const response = await resumeAction(conversationId, approved);
+      applyAgentResponse(response);
     } catch (err) {
       setMessages((prev) => [
         ...prev.slice(0, -1),
@@ -118,6 +168,39 @@ export default function ChatPage() {
                       •
                     </span>
                   </span>
+                ) : msg.confirmation ? (
+                  <div>
+                    <p className="mb-2">
+                      I&apos;d like to do the following — confirm?
+                    </p>
+                    <p className="mb-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-amber-900">
+                      {msg.confirmation.description}
+                    </p>
+                    {msg.confirmation.resolved ? (
+                      <p className="text-xs text-gray-500">
+                        {msg.confirmation.resolved === "approved"
+                          ? "Confirmed."
+                          : "Cancelled."}
+                      </p>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleConfirm(i, true)}
+                          disabled={loading}
+                          className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          onClick={() => handleConfirm(i, false)}
+                          disabled={loading}
+                          className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <>
                     <ReactMarkdown

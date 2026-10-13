@@ -13,7 +13,7 @@ export default function Nav() {
   return (
     <nav className="border-b border-gray-200 bg-white shadow-sm">
       <div className="mx-auto max-w-4xl px-4 py-3 flex items-center gap-8">
-        <Link href="/" className="flex items-baseline gap-2">
+        <Link href="/chat" className="flex items-baseline gap-2">
           <span className="text-lg font-semibold text-blue-600">
             ClinicDesk AI
           </span>

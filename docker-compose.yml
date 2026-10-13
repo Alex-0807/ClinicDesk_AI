@@ -16,6 +16,20 @@ services:
       timeout: 3s
       retries: 5
 
+  # Redis 8 bundles the JSON + search modules the LangGraph checkpointer needs
+  redis:
+    image: redis:8
+    restart: unless-stopped
+    ports:
+      - "6380:6379" # 6380 to avoid conflict with local Redis
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   backend:
     build: ./backend
     restart: unless-stopped
@@ -23,6 +37,7 @@ services:
       - "3003:3003"
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/clinicdesk
+      REDIS_URL: redis://redis:6379
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       JWT_SECRET: ${JWT_SECRET}
@@ -34,6 +49,8 @@ services:
     command: npm run dev
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   frontend:
@@ -53,3 +70,4 @@ services:
 
 volumes:
   pgdata:
+  redisdata:

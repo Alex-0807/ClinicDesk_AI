@@ -1,4 +1,5 @@
 import { tool } from "@langchain/core/tools";
+import { interrupt } from "@langchain/langgraph";
 import { z } from "zod";
 import { searchKnowledge } from "../services/knowledge";
 import {
@@ -9,6 +10,31 @@ import {
   modifyReservation,
   cancelReservation,
 } from "../services/reservation";
+
+// ---------------------------------------------------------------------------
+// Human-in-the-loop confirmation for write tools
+// ---------------------------------------------------------------------------
+
+export interface PendingAction {
+  toolName: string;
+  summary: string;
+}
+
+/**
+ * Pauses the agent graph and asks the user to approve a write action.
+ * On first pass this throws (caught by LangGraph, which persists state via
+ * the checkpointer). When the graph is resumed with a Command({ resume }),
+ * this returns that resume value directly.
+ *
+ * The resume value is wrapped in an object rather than a plain boolean:
+ * LangGraph's Command handling checks `if (cmd.resume)` internally, so a
+ * bare `resume: false` is treated as "no resume value" and throws
+ * EmptyInputError. An object is always truthy, sidestepping that.
+ */
+async function confirmAction(action: PendingAction): Promise<boolean> {
+  const { approved } = await interrupt<PendingAction, { approved: boolean }>(action);
+  return approved;
+}
 
 // ---------------------------------------------------------------------------
 // Knowledge / RAG tool
@@ -68,6 +94,13 @@ export const createReservationTool = (userId: string) =>
   tool(
     async ({ date, startTime, serviceType, notes }) => {
       const endTime = addThirtyMinutes(startTime);
+
+      const approved = await confirmAction({
+        toolName: "createReservation",
+        summary: `Book ${serviceType} on ${date} at ${startTime}–${endTime}.`,
+      });
+      if (!approved) return "Action cancelled by user.";
+
       const reservation = await createReservation({
         userId,
         date,
@@ -167,6 +200,15 @@ export const modifyReservationTool = tool(
     if (serviceType) updates.serviceType = serviceType;
     if (notes !== undefined) updates.notes = notes;
 
+    const changeDescription = Object.entries(updates)
+      .map(([key, value]) => `${key} → ${value}`)
+      .join(", ");
+    const approved = await confirmAction({
+      toolName: "modifyReservation",
+      summary: `Modify reservation ${id}: ${changeDescription}.`,
+    });
+    if (!approved) return "Action cancelled by user.";
+
     const r = await modifyReservation(id, updates);
     return (
       `Reservation updated. ${formatDate(r.date)} ${formatTime(r.startTime)}–${formatTime(r.endTime)} | ` +
@@ -191,6 +233,12 @@ export const modifyReservationTool = tool(
 
 export const cancelReservationTool = tool(
   async ({ id }) => {
+    const approved = await confirmAction({
+      toolName: "cancelReservation",
+      summary: `Cancel reservation ${id}.`,
+    });
+    if (!approved) return "Action cancelled by user.";
+
     const r = await cancelReservation(id);
     return `Reservation cancelled. ${formatDate(r.date)} ${formatTime(r.startTime)} ${r.serviceType} is now CANCELLED.`;
   },
